@@ -1,0 +1,77 @@
+#!/bin/sh
+echo "Enter the domain:"
+read domain
+
+app_type="try_files \$uri \$uri/ /index.php?\$query_string;"
+public_path=""
+
+echo "Select the app type:"
+options=("Laravel" "WordPress" "CakePHP" "Other")
+select opt in "${options[@]}"
+do
+    case $opt in
+        "Laravel")
+            public_path="/public" 
+            break
+            ;;
+        "WordPress")      
+            break
+            ;;
+        "CakePHP")
+             app_type="try_files \$uri \$uri/ /index.php?\$uri&\$args;"
+             public_path="/app/webroot"
+             break
+            ;;
+        "Other")
+            app_type="try_files \$uri \$uri/ =404;"
+
+            echo "Enter the public path:"
+            read public_path
+
+            break
+            ;;
+        *) echo "The option $REPLY is invalid";;
+    esac
+done
+
+#server_name=$(echo $domain | cut -d "." -f 1)
+#host_name=${domain//'.'/'-'}
+
+site_available="/etc/nginx/sites-available/${domain}"
+site_enabled="/etc/nginx/sites-enabled/${domain}"
+
+printf "server {
+    listen 80;
+    server_name ${domain}.localhost;
+    root /home/leonardo/sites/${domain}${public_path};
+
+    add_header X-Frame-Options \"SAMEORIGIN\";
+    add_header X-XSS-Protection \"1; mode=block\";
+    add_header X-Content-Type-Options \"nosniff\";
+
+    index index.html index.htm index.php;
+
+    charset utf-8;
+
+    location / {
+        try_files \$uri \$uri/ /index.php?\$query_string;
+    }
+
+    location = /favicon.ico { access_log off; log_not_found off; }
+    location = /robots.txt  { access_log off; log_not_found off; }
+
+    error_page 404 /index.php;
+
+    location ~ \.php$ {
+        fastcgi_pass unix:/var/run/php/php7.4-fpm.sock;
+        fastcgi_index index.php;
+        fastcgi_param SCRIPT_FILENAME \$realpath_root\$fastcgi_script_name;
+        include fastcgi_params;
+    }
+
+    location ~ /\.(?!well-known).* {
+        deny all;
+    }
+}" > ${site_available}
+
+ln -sf ${site_available} ${site_enabled} && nginx -t && systemctl reload nginx
